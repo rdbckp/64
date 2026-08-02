@@ -1,0 +1,101 @@
+name: Patch2 - Fix Manifest & Sepolicy Skeleton
+
+on:
+  workflow_dispatch:
+    inputs:
+      device_dir:
+        description: 'Path device tree (tempat manifest.xml & BoardConfigVendor.mk yang udah dipatch)'
+        required: true
+        default: 'vendor/samsung/a02'
+      proprietary_dir:
+        description: 'Path folder proprietary hasil extract'
+        required: true
+        default: 'vendor/samsung/a02/proprietary'
+
+permissions:
+  contents: write
+
+jobs:
+  patch2:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Backup file yang bakal diubah
+        run: |
+          DEVICE="${{ github.event.inputs.device_dir }}"
+          PROP="${{ github.event.inputs.proprietary_dir }}"
+          cp "$PROP/etc/vintf/manifest.xml" "$PROP/etc/vintf/manifest.xml.bak"
+          cp "$DEVICE/BoardConfigVendor.mk" "$DEVICE/BoardConfigVendor.mk.bak"
+          echo "Backup selesai"
+
+      - name: Overwrite proprietary manifest.xml pakai versi yang sudah dipatch
+        run: |
+          DEVICE="${{ github.event.inputs.device_dir }}"
+          PROP="${{ github.event.inputs.proprietary_dir }}"
+          if [ ! -f "$DEVICE/manifest.xml" ]; then
+            echo "ERROR: $DEVICE/manifest.xml (versi patched) tidak ditemukan"
+            exit 1
+          fi
+          echo "--- Sebelum overwrite (stock, dari vendor.img) ---"
+          grep -o '<version>[^<]*</version>' "$PROP/etc/vintf/manifest.xml" | head -5 || true
+          cp "$DEVICE/manifest.xml" "$PROP/etc/vintf/manifest.xml"
+          echo "--- Sesudah overwrite (patched, keymaster 4.1 + gatekeeper 1.0) ---"
+          grep -i "keymaster\|gatekeeper" "$PROP/etc/vintf/manifest.xml"
+
+      - name: Bikin skeleton sepolicy/
+        run: |
+          DEVICE="${{ github.event.inputs.device_dir }}"
+          mkdir -p "$DEVICE/sepolicy/private" "$DEVICE/sepolicy/public"
+
+          cat > "$DEVICE/sepolicy/private/file_contexts" << 'EOF'
+          # Placeholder file_contexts untuk vendor A02
+          # Isi rule spesifik HAL/domain di sini seiring kebutuhan
+          EOF
+
+          cat > "$DEVICE/sepolicy/private/genfs_contexts" << 'EOF'
+          # Placeholder genfs_contexts untuk vendor A02
+          EOF
+
+          cat > "$DEVICE/sepolicy/public/a02.te" << 'EOF'
+          # Placeholder type enforcement untuk domain vendor A02
+          # Tambahkan definisi type/domain HAL spesifik A02 di sini
+          EOF
+
+          echo "Skeleton sepolicy dibuat:"
+          find "$DEVICE/sepolicy" -type f
+
+      - name: Uncomment BOARD_VENDOR_SEPOLICY_DIRS di BoardConfigVendor.mk
+        run: |
+          DEVICE="${{ github.event.inputs.device_dir }}"
+          FILE="$DEVICE/BoardConfigVendor.mk"
+
+          if grep -q "^#.*BOARD_VENDOR_SEPOLICY_DIRS" "$FILE"; then
+            sed -i.sedbak 's|^#\(.*BOARD_VENDOR_SEPOLICY_DIRS.*\)|\1|' "$FILE"
+            echo "Uncomment berhasil. Baris sekarang:"
+            grep "BOARD_VENDOR_SEPOLICY_DIRS" "$FILE"
+          else
+            echo "PERINGATAN: Baris BOARD_VENDOR_SEPOLICY_DIRS (commented) tidak ditemukan persis seperti yang diharapkan."
+            echo "Isi baris terkait yang ada saat ini:"
+            grep -n "SEPOLICY" "$FILE" || echo "(tidak ada baris SEPOLICY sama sekali)"
+            echo "Menambahkan baris baru sebagai fallback:"
+            echo "BOARD_VENDOR_SEPOLICY_DIRS += $DEVICE/sepolicy" >> "$FILE"
+          fi
+
+      - name: Commit & push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${{ github.event.inputs.proprietary_dir }}/etc/vintf/manifest.xml" \
+                  "${{ github.event.inputs.proprietary_dir }}/etc/vintf/manifest.xml.bak" \
+                  "${{ github.event.inputs.device_dir }}/sepolicy" \
+                  "${{ github.event.inputs.device_dir }}/BoardConfigVendor.mk" \
+                  "${{ github.event.inputs.device_dir }}/BoardConfigVendor.mk.bak"
+          if git diff --cached --quiet; then
+            echo "Tidak ada perubahan untuk di-commit"
+          else
+            git commit -m "patch2: sync patched manifest.xml ke proprietary/, tambah skeleton sepolicy, uncomment BOARD_VENDOR_SEPOLICY_DIRS"
+            git push
+          fi
+          
