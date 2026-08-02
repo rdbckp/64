@@ -89,6 +89,7 @@ jobs:
           mkdir -p "$TARGET"
           sudo rsync -a --exclude='lost+found' work/mnt/ "$TARGET"/
           sudo chown -R $(whoami) "$TARGET"
+          sudo chmod -R u+rwX,go+rX "$TARGET"
           echo "Isi hasil extract:"
           find "$TARGET" -maxdepth 3
 
