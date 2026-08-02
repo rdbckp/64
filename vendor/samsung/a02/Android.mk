@@ -1,0 +1,8 @@
+LOCAL_PATH := $(call my-dir)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := a02-vendor
+LOCAL_MODULE_CLASS := FAKE
+LOCAL_MODULE_SUFFIX := 
+LOCAL_MODULE_TAGS := optional
+include $(BUILD_PREBUILT)

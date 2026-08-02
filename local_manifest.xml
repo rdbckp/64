@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <remote name="rdbckp" fetch="https://github.com/rdbckp/" />
+
+  <!-- Device tree for the Samsung Galaxy A02 target, aligned with LineageOS/AOSP-style paths -->
+  <project name="device_samsung_a02"
+           path="device/samsung/a02"
+           remote="rdbckp"
+           revision="main"
+           clone-depth="1" />
+
+  <!-- Vendor tree for the A02 target -->
+  <project name="vendor_a02"
+           path="vendor/samsung/a02"
+           remote="rdbckp"
+           revision="main"
+           clone-depth="1" />
+
+  <!-- Kernel tree for the MT6739-based A02 device -->
+  <project name="a02_local_manifest"
+           path="kernel/samsung/a02"
+           remote="rdbckp"
+           revision="main"
+           clone-depth="1" />
+</manifest>

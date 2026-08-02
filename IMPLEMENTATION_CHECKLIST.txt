@@ -1,0 +1,285 @@
+================================================================================
+  A02 32-BIT → 64-BIT PORTING: QUICK IMPLEMENTATION CHECKLIST
+================================================================================
+
+PROJECT STRUCTURE:
+  device/samsung/a02/     ← Device tree (BoardConfig.mk, etc)
+  vendor/samsung/a02/     ← Vendor tree (vendor makefile, manifest)
+  kernel/samsung/a02/     ← Kernel source (build → 64-bit Image.gz)
+
+================================================================================
+STEP 1: Update device/samsung/a02/BoardConfig.mk
+================================================================================
+
+ACTION: Replace entire file with BoardConfig_64bit_REVISED.mk
+
+KEY CHANGES:
+  ✓ TARGET_ARCH: arm → arm64
+  ✓ TARGET_CPU_ABI: armeabi-v7a → arm64-v8a
+  ✓ TARGET_USES_64_BIT_BINDER: false → true
+  ✓ BOARD_KERNEL_IMAGE_NAME: zImage → Image.gz
+  ✓ KERNEL_TARGET_ARCH: (NEW) arm64
+  ✓ BOARD_VNDK_VERSION: (NEW) 30
+
+VERIFY:
+  $ grep "TARGET_ARCH\|KERNEL_IMAGE\|VNDK\|BINDER" device/samsung/a02/BoardConfig.mk
+  OUTPUT SHOULD SHOW:
+    TARGET_ARCH := arm64
+    KERNEL_TARGET_ARCH := arm64
+    BOARD_KERNEL_IMAGE_NAME := Image.gz
+    TARGET_USES_64_BIT_BINDER := true
+    BOARD_VNDK_VERSION := 30
+
+================================================================================
+STEP 2: Update vendor/samsung/a02/a02-vendor.mk
+================================================================================
+
+ACTION: Replace with a02-vendor_64bit_REVISED.mk
+
+KEY CHANGES:
+  ✓ DEVICE_MANIFEST_FILE += vendor/samsung/a02/manifest.xml (ADD NEW LINE)
+  ✓ PRODUCT_COPY_FILES += manifest.xml to /vendor/etc/vintf/ (ADD NEW SECTION)
+
+VERIFY:
+  $ grep "DEVICE_MANIFEST_FILE" vendor/samsung/a02/a02-vendor.mk
+  OUTPUT SHOULD SHOW:
+    DEVICE_MANIFEST_FILE += vendor/samsung/a02/manifest.xml
+
+================================================================================
+STEP 3: Create vendor/samsung/a02/manifest.xml
+================================================================================
+
+ACTION: Create NEW file with manifest_VINTF_TEMPLATE.xml content
+
+COMMAND:
+  $ cp manifest_VINTF_TEMPLATE.xml vendor/samsung/a02/manifest.xml
+
+VERIFY:
+  $ file vendor/samsung/a02/manifest.xml
+  OUTPUT SHOULD SHOW: XML 1.0 document, UTF-8 Unicode text
+
+================================================================================
+STEP 4: Create Minimal Directory Structure (Vendor)
+================================================================================
+
+COMMAND:
+  $ mkdir -p vendor/samsung/a02/proprietary/lib64/hw
+  $ mkdir -p vendor/samsung/a02/proprietary/etc/init/hw
+  $ mkdir -p vendor/samsung/a02/proprietary/etc/vintf
+
+VERIFY:
+  $ ls -la vendor/samsung/a02/proprietary/lib64/
+
+================================================================================
+STEP 5: Copy Arch-Agnostic Files from 32-bit Vendor
+================================================================================
+
+ASSUMPTION: You have vendor_a02 (32-bit) available locally
+
+COPY COMMANDS:
+  # Navigate to your project
+  $ cd <AOSP_ROOT>
+
+  # Define path to 32-bit vendor (adjust path):
+  $ VENDOR_32BIT=<path_to_vendor_a02>/vendor_a02/samsung/a02/proprietary
+
+  # Copy fstab (partition mount - arch-agnostic):
+  $ cp $VENDOR_32BIT/etc/fstab.* vendor/samsung/a02/proprietary/etc/
+
+  # Copy audio config XML (arch-agnostic):
+  $ cp -r $VENDOR_32BIT/etc/audio vendor/samsung/a02/proprietary/etc/
+
+  # Copy media config (arch-agnostic):
+  $ cp -r $VENDOR_32BIT/etc/media vendor/samsung/a02/proprietary/etc/
+
+  # Copy firmware (arch-agnostic - modem/WiFi/BT):
+  $ cp -r $VENDOR_32BIT/firmware/* vendor/samsung/a02/proprietary/firmware/
+
+  # Copy overlay (RRO - arch-agnostic):
+  $ cp -r $VENDOR_32BIT/overlay/* vendor/samsung/a02/proprietary/overlay/ 2>/dev/null || true
+
+  # Copy init script (review before):
+  $ cp $VENDOR_32BIT/etc/init/hw/init.mt6739.rc vendor/samsung/a02/proprietary/etc/init/hw/
+
+VERIFY:
+  $ ls -la vendor/samsung/a02/proprietary/etc/
+  OUTPUT SHOULD SHOW: fstab.*, audio/, media/, init/, vintf/
+
+================================================================================
+STEP 6: Build Test
+================================================================================
+
+COMMAND SEQUENCE:
+  $ cd <AOSP_ROOT>
+  $ source build/envsetup.sh
+  $ lunch lineage_a02-userdebug  # or your target
+
+  # Build individual components:
+  $ make kernel -j8           # Build kernel (should output Image.gz)
+  $ make vendor -j8           # Build vendor partition
+  $ make system -j8           # Build system (use GSI 64-bit, or compile local system)
+  $ make boot -j8             # Build boot.img
+
+  # Or full build:
+  $ make -j8
+
+VERIFY KERNEL OUTPUT:
+  $ file out/target/product/a02/kernel
+  OUTPUT SHOULD SHOW: Linux kernel ARM64 boot executable..., gzip compressed
+
+VERIFY VENDOR:
+  $ file out/target/product/a02/vendor.img
+  OUTPUT SHOULD SHOW: Android sparse image...
+
+================================================================================
+STEP 7: Flash and Boot
+================================================================================
+
+PREREQUISITE: Device in Fastboot mode
+
+FLASH COMMANDS:
+  $ fastboot flash boot out/target/product/a02/boot.img
+  $ fastboot flash vendor out/target/product/a02/vendor.img
+  $ fastboot flash system out/target/product/a02/system.img  # GSI 64-bit
+  $ fastboot reboot
+
+MONITOR BOOT (in parallel):
+  $ adb wait-for-device
+  $ adb logcat > boot_log_64bit.log
+
+EXPECTED BOOT SEQUENCE (successful):
+  [   0.000] Linux version ...
+  [   ...] Kernel boot messages
+  [   ...] init: Service manager started
+  [   ...] init: Loading vendor /vendor/etc/init/hw/init.mt6739.rc
+  [...] Service 'vendor.hwcomposer-2-1' started (but may crash due to missing gralloc)
+
+EXPECTED ISSUES (normal for Phase 1):
+  - Gralloc crash (GPU driver missing)
+  - Camera crash (ISP driver missing)
+  - RIL crash (modem driver missing)
+  - Audio crash (DSP firmware missing)
+
+EXPECTED SUCCESS:
+  ✓ Kernel boots (64-bit)
+  ✓ Partitions mount (vendor, system)
+  ✓ `adb shell` works
+  ✓ Properties load from vendor.prop
+
+================================================================================
+STEP 8: Debug — Capture Logs
+================================================================================
+
+CAPTURE LOGCAT:
+  $ adb logcat > logcat_first_boot.log
+
+SEARCH FOR CRITICAL ERRORS:
+  $ grep -i "error\|fail\|crash" logcat_first_boot.log | head -20
+
+SEARCH FOR MISSING BLOBS:
+  $ grep -i "cannot load\|can't find\|lib64" logcat_first_boot.log
+
+SEARCH FOR BINDER ERRORS:
+  $ grep -i "binder\|ioctl" logcat_first_boot.log
+
+SAVE LOG FOR NEXT PHASE:
+  Keep logcat_first_boot.log, will guide Phase 2 (refinement)
+
+================================================================================
+FILE CHECKLIST (Copy/Update these files)
+================================================================================
+
+MUST EDIT:
+  [ ] device/samsung/a02/BoardConfig.mk
+      → Copy from: BoardConfig_64bit_REVISED.mk
+      → Key: TARGET_ARCH, KERNEL_IMAGE_NAME, BOARD_VNDK_VERSION
+
+  [ ] vendor/samsung/a02/a02-vendor.mk
+      → Copy from: a02-vendor_64bit_REVISED.mk
+      → Key: DEVICE_MANIFEST_FILE += manifest.xml
+
+MUST CREATE:
+  [ ] vendor/samsung/a02/manifest.xml
+      → Copy from: manifest_VINTF_TEMPLATE.xml
+      → This is CRITICAL for Treble/GSI compatibility
+
+SHOULD COPY (from 32-bit vendor_a02):
+  [ ] vendor/samsung/a02/proprietary/etc/fstab.*
+  [ ] vendor/samsung/a02/proprietary/etc/audio/
+  [ ] vendor/samsung/a02/proprietary/etc/media/
+  [ ] vendor/samsung/a02/proprietary/firmware/
+  [ ] vendor/samsung/a02/proprietary/overlay/
+  [ ] vendor/samsung/a02/proprietary/etc/init/hw/init.mt6739.rc
+
+CAN KEEP AS-IS:
+  [ ] vendor/samsung/a02/vendor.prop
+  [ ] device/samsung/a02/rootdir/etc/fstab.mt6739
+  [ ] device/samsung/a02/overlay/
+
+REVIEW (no changes needed usually):
+  [ ] vendor/samsung/a02/BoardConfigVendor.mk
+  [ ] vendor/samsung/a02/configs/board.mk
+  [ ] device/samsung/a02/device.mk
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+BUILD ERROR: "BOARD_VNDK_VERSION not defined"
+  → Make sure BoardConfig.mk has: BOARD_VNDK_VERSION := 30
+
+BUILD ERROR: "Image.gz not found"
+  → Kernel didn't build as arm64. Check:
+    - KERNEL_TARGET_ARCH := arm64 in BoardConfig
+    - a02_defconfig (check if it has ARM64 enabled)
+    - Try: make kernel KERNEL_CROSS_COMPILE=aarch64-linux-android-
+
+BOOT LOOP: No /vendor partition found
+  → Check: fstab.mt6739 has correct partition paths
+  → Check: vendor.img is flashed
+
+BOOT LOOP: SELinux denials
+  → Expected for first-boot. Use permissive:
+    - Edit BoardConfig: BOARD_SELINUX_PROFILE := (leave as is for permissive)
+    - Or `adb shell setenforce 0` if booted
+
+ADB NOT WORKING: Device not visible
+  → Device might be in boot loop. Reflash and monitor serial logs
+  → Try: `fastboot reboot bootloader` + `adb connect` over TCP
+
+================================================================================
+NEXT PHASE (After Successful Boot)
+================================================================================
+
+1. REVIEW LOGCAT
+   - Identify which HAL crashed first (gralloc? modem? audio?)
+   - Prioritize based on functionality needed
+
+2. REFINE VENDOR
+   - Add proper HAL blobs (64-bit versions from donor or stock)
+   - Implement HAL stubs for missing components
+   - Test incrementally: GPU first, then modem, then audio
+
+3. OPTIMIZE SELinux
+   - Switch from permissive to enforcing
+   - Add proper SELinux rules for new HALs
+
+4. SYSTEM IMAGE
+   - Swap system partition with full GSI 64-bit if needed
+   - Verify all components integrate properly
+
+================================================================================
+DOCUMENT REFERENCE
+================================================================================
+
+Generated from:
+  - A02_64BIT_PORTING_REVISED.md (detailed explanation)
+  - BoardConfig_64bit_REVISED.mk (device tree config)
+  - a02-vendor_64bit_REVISED.mk (vendor makefile)
+  - manifest_VINTF_TEMPLATE.xml (Treble manifest)
+
+Support:
+  - rdbckp/a022f_kernel (64-bit kernel source)
+  - xiaomi-mt6765-dev (reference for MT6765 64-bit structure)
+
+================================================================================

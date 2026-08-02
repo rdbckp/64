@@ -1,0 +1,6 @@
+ro.product.device=a02
+ro.product.model=Galaxy A02
+ro.product.brand=samsung
+ro.product.manufacturer=samsung
+ro.build.product=a02
+ro.board.platform=mt6739
