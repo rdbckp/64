@@ -1,4 +1,4 @@
-name: Extract Local Manifest Zip
+name: Extract Local Manifest Zip (+ Fix Empty Folders)
 
 on:
   workflow_dispatch:
@@ -74,6 +74,19 @@ jobs:
       - name: Hapus file zip (kalau diminta)
         if: ${{ github.event.inputs.delete_zip_after == 'true' }}
         run: rm -f "${{ github.event.inputs.zip_path }}"
+
+      - name: Tandai folder kosong dengan .gitkeep
+        run: |
+          # Git gak bisa nge-track folder kosong, jadi folder placeholder
+          # (misal vendor/.../proprietary/lib64/hw) perlu ditandain
+          # biar strukturnya ke-commit walau isinya masih kosong.
+          COUNT=0
+          while IFS= read -r -d '' dir; do
+            echo "Folder kosong ditemukan: $dir"
+            touch "$dir/.gitkeep"
+            COUNT=$((COUNT + 1))
+          done < <(find . -type d -not -path '*/.git*' -empty -print0)
+          echo "Total folder kosong yang di-fix: $COUNT"
 
       - name: Commit & push perubahan
         run: |
