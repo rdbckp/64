@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- 
+<!--
 VINTF Manifest for Samsung Galaxy A02 64-bit Vendor Partition
 Copy to: vendor/samsung/a02/manifest.xml
 
@@ -14,21 +14,21 @@ target-level="30" = Android 11, VNDK version 30
        Graphics (Gralloc) HAL
        ============================================================ -->
   <hal format="hidl">
-    <name>android.hardware.graphics.allocator</name>
+    <n>android.hardware.graphics.allocator</n>
     <transport>hwbinder</transport>
     <version>3.0</version>
     <interface>
-      <name>IAllocator</name>
+      <n>IAllocator</n>
       <instance>default</instance>
     </interface>
   </hal>
 
   <hal format="hidl">
-    <name>android.hardware.graphics.composer</name>
+    <n>android.hardware.graphics.composer</n>
     <transport>hwbinder</transport>
     <version>2.1</version>
     <interface>
-      <name>IComposer</name>
+      <n>IComposer</n>
       <instance>default</instance>
     </interface>
   </hal>
@@ -37,11 +37,11 @@ target-level="30" = Android 11, VNDK version 30
        Power Management HAL
        ============================================================ -->
   <hal format="hidl">
-    <name>android.hardware.power</name>
+    <n>android.hardware.power</n>
     <transport>hwbinder</transport>
     <version>1.2</version>
     <interface>
-      <name>IPower</name>
+      <n>IPower</n>
       <instance>default</instance>
     </interface>
   </hal>
@@ -50,11 +50,11 @@ target-level="30" = Android 11, VNDK version 30
        Lights (LED/Backlight) HAL
        ============================================================ -->
   <hal format="hidl">
-    <name>android.hardware.lights</name>
+    <n>android.hardware.lights</n>
     <transport>hwbinder</transport>
     <version>2.0</version>
     <interface>
-      <name>ILight</name>
+      <n>ILight</n>
       <instance>default</instance>
     </interface>
   </hal>
@@ -63,11 +63,11 @@ target-level="30" = Android 11, VNDK version 30
        Vibrator HAL
        ============================================================ -->
   <hal format="hidl">
-    <name>android.hardware.vibrator</name>
+    <n>android.hardware.vibrator</n>
     <transport>hwbinder</transport>
     <version>1.3</version>
     <interface>
-      <name>IVibrator</name>
+      <n>IVibrator</n>
       <instance>default</instance>
     </interface>
   </hal>
@@ -76,15 +76,15 @@ target-level="30" = Android 11, VNDK version 30
        Radio (Modem/RIL) HAL
        ============================================================ -->
   <hal format="hidl">
-    <name>android.hardware.radio</name>
+    <n>android.hardware.radio</n>
     <transport>hwbinder</transport>
     <version>1.5</version>
     <interface>
-      <name>IRadio</name>
+      <n>IRadio</n>
       <instance>slot1</instance>
     </interface>
     <interface>
-      <name>ISap</name>
+      <n>ISap</n>
       <instance>slot1</instance>
     </interface>
   </hal>
@@ -93,11 +93,11 @@ target-level="30" = Android 11, VNDK version 30
        WiFi HAL
        ============================================================ -->
   <hal format="hidl">
-    <name>android.hardware.wifi</name>
+    <n>android.hardware.wifi</n>
     <transport>hwbinder</transport>
     <version>1.4</version>
     <interface>
-      <name>IWifi</name>
+      <n>IWifi</n>
       <instance>default</instance>
     </interface>
   </hal>
@@ -106,11 +106,11 @@ target-level="30" = Android 11, VNDK version 30
        Bluetooth HAL
        ============================================================ -->
   <hal format="hidl">
-    <name>android.hardware.bluetooth</name>
+    <n>android.hardware.bluetooth</n>
     <transport>hwbinder</transport>
     <version>1.1</version>
     <interface>
-      <name>IBluetoothHci</name>
+      <n>IBluetoothHci</n>
       <instance>default</instance>
     </interface>
   </hal>
@@ -119,11 +119,41 @@ target-level="30" = Android 11, VNDK version 30
        Thermal Management (Optional)
        ============================================================ -->
   <hal format="hidl">
-    <name>android.hardware.thermal</name>
+    <n>android.hardware.thermal</n>
     <transport>hwbinder</transport>
     <version>2.0</version>
     <interface>
-      <name>IThermal</name>
+      <n>IThermal</n>
+      <instance>default</instance>
+    </interface>
+  </hal>
+
+  <!-- ============================================================
+       Keymaster HAL (WAJIB - tanpa ini vold/keystore2 gagal,
+       device stuck di boot animation atau gagal decrypt /data)
+       Pakai versi software/default dulu sampai blob asli MediaTek
+       tersedia di Phase 2.
+       ============================================================ -->
+  <hal format="hidl">
+    <n>android.hardware.keymaster</n>
+    <transport>hwbinder</transport>
+    <version>4.1</version>
+    <interface>
+      <n>IKeymasterDevice</n>
+      <instance>default</instance>
+    </interface>
+  </hal>
+
+  <!-- ============================================================
+       Gatekeeper HAL (WAJIB - dipakai buat lockscreen credential
+       & tied ke Keymaster di atas)
+       ============================================================ -->
+  <hal format="hidl">
+    <n>android.hardware.gatekeeper</n>
+    <transport>hwbinder</transport>
+    <version>1.0</version>
+    <interface>
+      <n>IGatekeeper</n>
       <instance>default</instance>
     </interface>
   </hal>
@@ -133,11 +163,11 @@ target-level="30" = Android 11, VNDK version 30
        ============================================================ -->
   <!-- NOTE: Actual audio HAL blob will be added in Phase 2
   <hal format="hidl">
-    <name>android.hardware.audio</name>
+    <n>android.hardware.audio</n>
     <transport>hwbinder</transport>
     <version>6.0</version>
     <interface>
-      <name>IDevicesFactory</name>
+      <n>IDevicesFactory</n>
       <instance>default</instance>
     </interface>
   </hal>
@@ -148,11 +178,11 @@ target-level="30" = Android 11, VNDK version 30
        ============================================================ -->
   <!-- NOTE: Camera ISP blob will be added in Phase 2 after GPU works
   <hal format="hidl">
-    <name>android.hardware.camera.provider</name>
+    <n>android.hardware.camera.provider</n>
     <transport>hwbinder</transport>
     <version>2.4</version>
     <interface>
-      <name>ICameraProvider</name>
+      <n>ICameraProvider</n>
       <instance>0</instance>
     </interface>
   </hal>

@@ -8,8 +8,7 @@ PRODUCT_PROPERTY_OVERRIDES += \
     ro.vendor.device=a02 \
     ro.vendor.model=Galaxy\ A02 \
     ro.vendor.product.device=a02 \
-    ro.vendor.product.model=Galaxy\ A02 \
-    ro.vendor.extension_library=/vendor/lib64/libqti-perfd-client.so
+    ro.vendor.product.model=Galaxy\ A02
 
 # 64-bit Specific: VINTF Manifest Declaration (Treble)
 DEVICE_MANIFEST_FILE += vendor/samsung/a02/manifest.xml

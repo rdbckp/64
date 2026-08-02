@@ -2,3 +2,9 @@ ro.vendor.device=a02
 ro.vendor.model=Galaxy A02
 ro.vendor.product.device=a02
 ro.vendor.product.model=Galaxy A02
+
+# VNDK version harus align sama target-level di manifest.xml (30 = Android 11)
+ro.vndk.version=30
+# VNDK lite: kurangin requirement full VNDK, cocok buat device low-spec
+# kayak MT6739 yang blob-nya masih campuran/belum lengkap
+ro.vndk.lite=true
