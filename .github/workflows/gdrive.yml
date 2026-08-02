@@ -1,0 +1,128 @@
+name: Extract Vendor Blobs from Stock vendor.img
+
+on:
+  workflow_dispatch:
+    inputs:
+      gdrive_url:
+        description: 'Google Drive share link (zip berisi vendor.img)'
+        required: true
+        default: 'https://drive.google.com/file/d/1brg3d-2PaSA9pBkuyjMl2wd1N4AHgus3/view?usp=sharing'
+      target_dir:
+        description: 'Folder tujuan extract di repo'
+        required: true
+        default: 'vendor/samsung/a02/proprietary'
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip e2fsprogs android-sdk-libsparse-utils python3-pip rsync
+          pip install --break-system-packages gdown
+
+      - name: Extract Google Drive file ID
+        id: fileid
+        run: |
+          URL="${{ github.event.inputs.gdrive_url }}"
+          FILE_ID=$(echo "$URL" | sed -n 's#.*/d/\([^/]*\)/.*#\1#p')
+          if [ -z "$FILE_ID" ]; then
+            FILE_ID=$(echo "$URL" | sed -n 's#.*id=\([^&]*\).*#\1#p')
+          fi
+          echo "Extracted FILE_ID=$FILE_ID"
+          echo "file_id=$FILE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download zip dari Google Drive
+        run: |
+          mkdir -p work
+          gdown "https://drive.google.com/uc?id=${{ steps.fileid.outputs.file_id }}" -O work/vendor_source.zip
+
+      - name: Unzip
+        run: |
+          cd work
+          unzip -o vendor_source.zip -d extracted
+
+      - name: Cari file vendor.img
+        id: findimg
+        run: |
+          IMG_PATH=$(find work/extracted -iname "*.img" | head -n 1)
+          if [ -z "$IMG_PATH" ]; then
+            echo "ERROR: Tidak ada file .img ditemukan di dalam zip"
+            find work/extracted -type f
+            exit 1
+          fi
+          echo "Ketemu: $IMG_PATH"
+          echo "img_path=$IMG_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Deteksi & convert sparse image (kalau perlu)
+        id: rawimg
+        run: |
+          IMG="${{ steps.findimg.outputs.img_path }}"
+          MAGIC=$(od -An -tx1 -N4 "$IMG" | tr -d ' \n')
+          echo "Magic bytes: $MAGIC"
+          if [ "$MAGIC" = "3aff26ed" ]; then
+            echo "Sparse image terdeteksi, converting..."
+            simg2img "$IMG" work/vendor_raw.img
+            echo "raw_img=work/vendor_raw.img" >> "$GITHUB_OUTPUT"
+          else
+            echo "Bukan sparse image, pakai langsung"
+            echo "raw_img=$IMG" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Mount vendor.img
+        run: |
+          mkdir -p work/mnt
+          sudo mount -o loop,ro "${{ steps.rawimg.outputs.raw_img }}" work/mnt
+          echo "Isi vendor.img:"
+          ls -la work/mnt
+
+      - name: Copy blob ke proprietary/
+        run: |
+          TARGET="${{ github.event.inputs.target_dir }}"
+          mkdir -p "$TARGET"
+          sudo rsync -a --exclude='lost+found' work/mnt/ "$TARGET"/
+          sudo chown -R $(whoami) "$TARGET"
+          echo "Isi hasil extract:"
+          find "$TARGET" -maxdepth 3
+
+      - name: Hapus .gitkeep yang udah kegantiin file asli
+        run: |
+          TARGET="${{ github.event.inputs.target_dir }}"
+          find "$TARGET" -name ".gitkeep" | while read -r f; do
+            dir=$(dirname "$f")
+            count=$(find "$dir" -maxdepth 1 -type f ! -name ".gitkeep" | wc -l)
+            if [ "$count" -gt 0 ]; then
+              echo "Removing stale $f"
+              rm "$f"
+            fi
+          done
+
+      - name: Unmount
+        if: always()
+        run: sudo umount work/mnt || true
+
+      - name: Generate proprietary-files.txt (referensi)
+        run: |
+          TARGET="${{ github.event.inputs.target_dir }}"
+          cd "$TARGET"
+          find . -type f | sed 's|^\./||' | sort > ../proprietary-files.txt
+          echo "Generated $(wc -l < ../proprietary-files.txt) entries"
+
+      - name: Commit & push hasil extract
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${{ github.event.inputs.target_dir }}" "$(dirname "${{ github.event.inputs.target_dir }}")/proprietary-files.txt"
+          if git diff --cached --quiet; then
+            echo "Tidak ada perubahan untuk di-commit"
+          else
+            git commit -m "Extract vendor blobs from stock vendor.img"
+            git push
+          fi
