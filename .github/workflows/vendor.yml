@@ -1,0 +1,129 @@
+name: Build vendor.img (ext4)
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_path:
+        description: "Folder sumber isi partisi vendor (relatif dari root repo)"
+        required: true
+        default: "vendor/samsung/a02/proprietary"
+      partition_label:
+        description: "Label partisi"
+        required: true
+        default: "vendor"
+      image_size_mb:
+        description: "Ukuran image dalam MB. Isi 0 buat auto-hitung (ukuran isi + margin)"
+        required: true
+        default: "0"
+      margin_mb:
+        description: "Margin ekstra (MB) kalau pakai auto-hitung"
+        required: true
+        default: "64"
+      upload_release:
+        description: "Attach vendor.img ke GitHub Release?"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-vendor-img:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Cek folder sumber ada
+        run: |
+          if [ ! -d "${{ github.event.inputs.source_path }}" ]; then
+            echo "::error::Folder '${{ github.event.inputs.source_path }}' tidak ditemukan di repo."
+            exit 1
+          fi
+          echo "Isi folder sumber:"
+          find "${{ github.event.inputs.source_path }}" -maxdepth 3
+
+      - name: Install e2fsprogs / android-tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y e2fsprogs android-sdk-libsparse-utils || true
+          mke2fs -V
+
+      - name: Hitung ukuran image
+        id: size
+        run: |
+          SRC="${{ github.event.inputs.source_path }}"
+          INPUT_SIZE="${{ github.event.inputs.image_size_mb }}"
+          MARGIN="${{ github.event.inputs.margin_mb }}"
+
+          if [ "$INPUT_SIZE" = "0" ]; then
+            CONTENT_MB=$(du -sm "$SRC" | cut -f1)
+            TOTAL_MB=$((CONTENT_MB + MARGIN))
+            # minimum 16MB biar mke2fs gak komplain image kekecilan
+            if [ "$TOTAL_MB" -lt 16 ]; then
+              TOTAL_MB=16
+            fi
+          else
+            TOTAL_MB="$INPUT_SIZE"
+          fi
+
+          echo "Ukuran image: ${TOTAL_MB}M"
+          echo "size_mb=${TOTAL_MB}" >> "$GITHUB_OUTPUT"
+
+      - name: Build fs_config & file_contexts kosong (default permission)
+        run: |
+          SRC="${{ github.event.inputs.source_path }}"
+          # fs_config default: root:root 0644 buat file, 0755 buat folder
+          find "$SRC" | while read -r f; do
+            rel="${f#$SRC/}"
+            [ "$f" = "$SRC" ] && continue
+            if [ -d "$f" ]; then
+              echo "$rel 0 2000 0755"
+            else
+              echo "$rel 0 2000 0644"
+            fi
+          done > fs_config.txt
+          echo "Contoh isi fs_config.txt:"
+          head -20 fs_config.txt || true
+
+      - name: Build vendor.img (ext4)
+        run: |
+          SRC="${{ github.event.inputs.source_path }}"
+          LABEL="${{ github.event.inputs.partition_label }}"
+          SIZE="${{ steps.size.outputs.size_mb }}"
+
+          mke2fs -F -t ext4 -b 4096 \
+            -L "$LABEL" \
+            -M "/$LABEL" \
+            -d "$SRC" \
+            vendor.img "${SIZE}M"
+
+          echo "### Info vendor.img" >> $GITHUB_STEP_SUMMARY
+          ls -lh vendor.img >> $GITHUB_STEP_SUMMARY
+          file vendor.img >> $GITHUB_STEP_SUMMARY
+
+      - name: Verifikasi image
+        run: |
+          e2fsck -fn vendor.img || true
+          dumpe2fs -h vendor.img
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vendor-img
+          path: vendor.img
+          retention-days: 14
+
+      - name: Buat / update release dengan vendor.img
+        if: ${{ github.event.inputs.upload_release == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: vendor-img-${{ github.run_number }}
+          name: "vendor.img build #${{ github.run_number }}"
+          files: vendor.img
+          body: |
+            Dibuild otomatis dari folder `${{ github.event.inputs.source_path }}`
+            Ukuran: ${{ steps.size.outputs.size_mb }}M
+            Label partisi: ${{ github.event.inputs.partition_label }}
+            
