@@ -17,6 +17,9 @@ on:
         required: true
         default: "Extract local manifest into repo root"
 
+permissions:
+  contents: write
+
 jobs:
   extract:
     runs-on: ubuntu-latest
